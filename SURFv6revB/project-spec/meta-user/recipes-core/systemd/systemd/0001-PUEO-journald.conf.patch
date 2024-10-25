@@ -1,0 +1,50 @@
+From 88ea77e94ec2c6e1bcda076f5da9a3c7fadfadd2 Mon Sep 17 00:00:00 2001
+From: Patrick Allison <allison.122@osu.edu>
+Date: Tue, 22 Oct 2024 16:51:28 +0000
+Subject: [PATCH] PUEO journald.conf
+
+---
+ src/journal/journald.conf | 33 +++------------------------------
+ 1 file changed, 3 insertions(+), 30 deletions(-)
+
+diff --git a/src/journal/journald.conf b/src/journal/journald.conf
+index 5a60a9d39c..915136487b 100644
+--- a/src/journal/journald.conf
++++ b/src/journal/journald.conf
+@@ -15,33 +15,6 @@
+ # See journald.conf(5) for details.
+ 
+ [Journal]
+-#Storage=auto
+-#Compress=yes
+-#Seal=yes
+-#SplitMode=uid
+-#SyncIntervalSec=5m
+-#RateLimitIntervalSec=30s
+-#RateLimitBurst=10000
+-#SystemMaxUse=
+-#SystemKeepFree=
+-#SystemMaxFileSize=
+-#SystemMaxFiles=100
+-#RuntimeMaxUse=
+-#RuntimeKeepFree=
+-#RuntimeMaxFileSize=
+-#RuntimeMaxFiles=100
+-#MaxRetentionSec=
+-#MaxFileSec=1month
+-#ForwardToSyslog=no
+-#ForwardToKMsg=no
+-#ForwardToConsole=no
+-#ForwardToWall=yes
+-#TTYPath=/dev/console
+-#MaxLevelStore=debug
+-#MaxLevelSyslog=debug
+-#MaxLevelKMsg=notice
+-#MaxLevelConsole=info
+-#MaxLevelWall=emerg
+-#LineMax=48K
+-#ReadKMsg=yes
+-#Audit=yes
++Storage=volatile
++Compress=yes
++SystemMaxUse=16M

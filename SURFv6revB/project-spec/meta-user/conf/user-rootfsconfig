@@ -1,0 +1,11 @@
+#Note: Mention Each package in individual line
+#These packages will get added into rootfs menu entry
+
+CONFIG_gpio-demo
+CONFIG_peekpoke
+CONFIG_ldd
+CONFIG_squashfs-tools
+CONFIG_jc
+CONFIG_jdld
+CONFIG_jdld-init
+CONFIG_pueo-squashfs

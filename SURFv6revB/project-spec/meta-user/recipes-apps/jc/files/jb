@@ -1,0 +1,7 @@
+#!/bin/bash
+
+JC_CMD="/usr/bin/jc"
+
+stty -echo
+$JC_CMD
+stty echo

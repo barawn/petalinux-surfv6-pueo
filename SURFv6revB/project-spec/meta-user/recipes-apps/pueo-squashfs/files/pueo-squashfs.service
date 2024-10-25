@@ -1,0 +1,9 @@
+[Unit]
+Description=pueo-squashfs
+
+[Service]
+ExecStart=/usr/bin/pueo-squashfs.sh
+StandardOutput=journal
+
+[Install]
+WantedBy=multi-user.target

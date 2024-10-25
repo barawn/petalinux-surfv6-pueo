@@ -1,0 +1,9 @@
+[Unit]
+Description=jdld-init
+
+[Service]
+ExecStart=/usr/bin/jdld
+StandardOutput=journal
+
+[Install]
+WantedBy=multi-user.target
