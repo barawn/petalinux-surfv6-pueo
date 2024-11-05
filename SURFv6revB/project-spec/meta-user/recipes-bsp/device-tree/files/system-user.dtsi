@@ -17,6 +17,8 @@
 };
 
 #include "include/dt-bindings/phy/phy.h"
+#include "include/dt-bindings/gpio/gpio.h"
+
 
 &sdhci1 {
 	disable-wp;
@@ -51,6 +53,9 @@
       ethernet_phy0: ethernet-phy@0 {
       		     compatible = "marvell,88e1510";
 		     device_type = "ethernet-phy";
+		     reset-gpios = <&gpio 36 GPIO_ACTIVE_LOW>;
+		     reset-assert-us = <15000>;
+		     reset-deassert-us = <15000>;
 		     reg = <1>;
       };
 };

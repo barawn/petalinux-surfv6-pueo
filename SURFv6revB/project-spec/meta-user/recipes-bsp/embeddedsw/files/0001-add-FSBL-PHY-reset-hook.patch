@@ -1,0 +1,75 @@
+From 1a5583ab079cb5e5103044be721d78ab4fb57da4 Mon Sep 17 00:00:00 2001
+From: Patrick Allison <allison.122@osu.edu>
+Date: Tue, 5 Nov 2024 15:50:29 +0000
+Subject: [PATCH] add FSBL PHY reset hook
+
+---
+ lib/sw_apps/zynqmp_fsbl/src/xfsbl_hooks.c | 41 ++++++++++++++++++++++-
+ 1 file changed, 40 insertions(+), 1 deletion(-)
+
+diff --git a/lib/sw_apps/zynqmp_fsbl/src/xfsbl_hooks.c b/lib/sw_apps/zynqmp_fsbl/src/xfsbl_hooks.c
+index 80a1314203..bbcc5588b3 100644
+--- a/lib/sw_apps/zynqmp_fsbl/src/xfsbl_hooks.c
++++ b/lib/sw_apps/zynqmp_fsbl/src/xfsbl_hooks.c
+@@ -29,6 +29,12 @@
+ #include "xfsbl_hw.h"
+ #include "xfsbl_hooks.h"
+ #include "psu_init.h"
++// OSU PSA 11/5/24
++#include "xparameters.h"
++#include "xgpiops.h"
++#include "sleep.h"
++// END OSU PSA 11/5/24
++
+ /************************** Constant Definitions *****************************/
+ 
+ /**************************** Type Definitions *******************************/
+@@ -64,6 +70,20 @@ u32 XFsbl_HookAfterBSDownload(void )
+ }
+ #endif
+ 
++// I HAVE NO FUCKING IDEA, I'M JUST COPYING THE GODDAMN EXAMPLE
++// FROM xgpiops_polled_example.c
++// SDT IS SYSTEM DEVICE TREE BUT FUCK ALL IF I KNOW IF THE FSBL
++// USES IT
++#ifndef SDT
++#ifndef GPIO_DEVICE_ID
++#define GPIO_DEVICE_ID XPAR_XGPIOPS_0_DEVICE_ID
++#endif // GPIO_DEVICE_ID
++#else // SDT
++#define XGPIOPS_BASEADDR XPAR_XGPIOPS_0_BASEADDR
++#endif // SDT
++
++XGpioPs Gpio;
++
+ u32 XFsbl_HookBeforeHandoff(u32 EarlyHandoff)
+ {
+ 	u32 Status = XFSBL_SUCCESS;
+@@ -71,7 +91,26 @@ u32 XFsbl_HookBeforeHandoff(u32 EarlyHandoff)
+ 	/**
+ 	 * Add the code here
+ 	 */
+-
++	/*
++	 * OSU - PSA - try to fix the goddamn PHY reset bullshit fucking
++	 * SOMEHOW. I DON'T CARE. JUST GODDAMN WORK YOU POS
++	 */
++	XGpioPs_Config *ConfigPtr;
++#ifndef SDT	
++	ConfigPtr = XGpioPs_LookupConfig(GPIO_DEVICE_ID);
++#else
++	ConfigPtr = XGpioPs_LookupConfig(XGPIOPS_BASEADDR);
++#endif
++	Status = XGpioPs_CfgInitialize(&Gpio,
++				       ConfigPtr,
++				       ConfigPtr->BaseAddr);
++	XGpioPs_SetDirectionPin(&Gpio, 36, 1);
++	XGpioPs_SetOutputEnablePin(&Gpio, 36, 1);
++	XGpioPs_WritePin(&Gpio, 36, 0);
++	usleep(12000);
++	XGpioPs_WritePin(&Gpio, 36, 1);
++	XFsbl_Printf(DEBUG_PRINT_ALWAYS, "PHY reset complete.\n");	
++	usleep(12000);
+ 	return Status;
+ }
+ 
