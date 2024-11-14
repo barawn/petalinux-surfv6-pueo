@@ -14,5 +14,6 @@ SRC_URI += "file://surf_user.cfg \
             file://user_2024-10-15-20-29-00.cfg \
             file://user_2024-10-16-15-37-00.cfg \
             file://user_2024-10-24-19-44-00.cfg \
+            file://user_2024-11-14-16-48-00.cfg \
             "
 

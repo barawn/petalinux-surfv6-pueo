@@ -63,15 +63,22 @@ umount_qspifs() {
 uncompress_bitstreams() {
     SFX=$1
     PROG=$2
-    for i in `ls ${PUEOBITDIR}/*${SFX}`
+    # search slots and main dir (for... whatever reason)
+    for i in `ls ${PUEOBITDIR}/*${SFX} ${PUEOBITDIR}/[012]/*${SFX}`
     do
 	NEWNAME="$(basename $i $SFX)"
-	echo "Uncompressing $i to ${PUEOLIBBITDIR}/${NEWNAME}"
-	if [ -f ${PUEOLIBBITDIR}/${NEWNAME} ] ; then
-	    rm -rf ${PUEOLIBBITDIR}/${NEWNAME}
-	fi
+	SLOTDIR="$(dirname $i)"
+	SLOTNUM="$(basename $SLOTDIR)"
+	DEST=${PUEOLIBBITDIR}/${NEWNAME}
+	echo "Uncompressing $i to ${DEST}"
 	# prog needs to decompress to stdout and keep original
-	${PROG} $i > ${PUEOLIBBITDIR}/${NEWNAME}
+	${PROG} $i > ${PUEOLIBBITDIR}/${DEST}
+	# check if it was in a slotdir
+	if [ $SLOTDIR != $SLOTNUM ] ; then
+	    LINKPATH=${PUEOLIBBITDIR}/${SLOTNUM}
+	    echo "Linking ${LINKPATH} to $i"
+	    ln -s ${DEST} ${LINKPATH}
+	fi
     done
 }
 
