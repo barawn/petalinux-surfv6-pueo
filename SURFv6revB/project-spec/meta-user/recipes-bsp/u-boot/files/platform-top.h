@@ -5,6 +5,7 @@
 
 #define CONFIG_EXTRA_ENV_SETTINGS  \
   "mtdparts=nor0:1920k(boot),128k(bootscr),126M(qspifs)" \
+  "preboot=run read_MAC" \
   "read_MAC=setenv mm_ethaddr 0 \
     && i2c dev 1 \
     && i2c read 50 FA 6 $\{mm_ethaddr\} \

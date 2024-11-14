@@ -29,6 +29,7 @@ catch_term() {
 }
 
 create_temporary_dirs() {
+    # always safe
     if [ ! -e $PUEOTMPDIR ] ; then
        echo "Creating $PUEOTMPDIR and subdirectories."
        mkdir $PUEOTMPDIR
@@ -88,8 +89,6 @@ mount_pueofs() {
     if mountpoint -q $PUEOFS ; then
 	echo "${PUEOFS} is already mounted, skipping"
     else
-	# create the tempdirs, this should always be safe
-	create_temporary_dirs
 	# the only thing we check is if the sqfs exists:
 	# if it does, we assume we're restarting, and don't
 	# copy anything. Otherwise we copy everything.
@@ -143,10 +142,13 @@ umount_pueofs() {
 cache_eeprom() {
     EEPROM="/sys/bus/i2c/devices/1-0050/eeprom"
     CACHE="/tmp/pueo/eeprom"
-    echo "Caching ${EEPROM} to ${CACHE}"
-    cat $EEPROM > $CACHE
+    if [ ! -f ${CACHE} ] ; then
+	echo "Caching ${EEPROM} to ${CACHE}"
+	cat $EEPROM > $CACHE
+    fi
 }
 
+create_temporary_dirs
 cache_eeprom
 mount_pueofs
 
