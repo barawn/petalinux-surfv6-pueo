@@ -19,7 +19,6 @@ SRC_URI += "file://user_surf6.cfg \
             file://user_2024-10-09-17-19-00.cfg \
             file://user_2024-10-09-17-37-00.cfg \
             file://user_2024-10-09-17-41-00.cfg \
-            file://user_2024-10-10-16-48-00.cfg \
             file://user_2024-10-10-17-03-00.cfg \
             file://user_2024-10-10-17-15-00.cfg \
             "

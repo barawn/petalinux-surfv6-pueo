@@ -25,6 +25,24 @@
 	       linux,code = <30>; /* A */
 	       gpio-key,wakeup;
 	};
+	fwupd1 {
+	       label = "fwupd1";
+	       gpios = <&gpio 87 0>;
+	       linux,code = <31>; /* B */
+	       gpio-key,wakeup;
+	};
+	emio10 {
+	       label = "emio10";
+	       gpios = <&gpio 88 0>;
+	       linux,code = <32>; /* C */
+	       gpio-key,wakeup;
+	};
+	emio11 {
+	       label = "emio11";
+	       gpios = <&gpio 89 0>;
+	       linux,code = <33>; /* D */
+	       gpio-key,wakeup;
+	};
    };
 };
 

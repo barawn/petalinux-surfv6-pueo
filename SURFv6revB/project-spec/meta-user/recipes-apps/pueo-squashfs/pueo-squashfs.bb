@@ -25,8 +25,7 @@ INITSCRIPT_PARAMS = "start 99 S ."
 
 SYSTEMD_PACKAGES = "${PN}"
 SYSTEMD_SERVICE:${PN} = "pueo-squashfs.service"
-# NOTE NOTE NOTE: this is temporary for testing only
-SYSTEMD_AUTO_ENABLE:${PN} = "disable"
+SYSTEMD_AUTO_ENABLE:${PN} = "enable"
 
 # we have to create /usr/local as well to allow the mountpoint to work.
 do_install() {

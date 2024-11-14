@@ -140,6 +140,14 @@ umount_pueofs() {
     umount $PUEOSQFSMNT
 }
 
+cache_eeprom() {
+    EEPROM="/sys/bus/i2c/devices/1-0050/eeprom"
+    CACHE="/tmp/pueo/eeprom"
+    echo "Caching ${EEPROM} to ${CACHE}"
+    cat $EEPROM > $CACHE
+}
+
+cache_eeprom
 mount_pueofs
 
 # catch termination
