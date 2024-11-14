@@ -72,11 +72,11 @@ uncompress_bitstreams() {
 	DEST=${PUEOLIBBITDIR}/${NEWNAME}
 	echo "Uncompressing $i to ${DEST}"
 	# prog needs to decompress to stdout and keep original
-	${PROG} $i > ${PUEOLIBBITDIR}/${DEST}
+	${PROG} $i > ${DEST}
 	# check if it was in a slotdir
 	if [ $SLOTDIR != $SLOTNUM ] ; then
 	    LINKPATH=${PUEOLIBBITDIR}/${SLOTNUM}
-	    echo "Linking ${LINKPATH} to $i"
+	    echo "Linking ${LINKPATH} to ${DEST}"
 	    ln -s ${DEST} ${LINKPATH}
 	fi
     done
