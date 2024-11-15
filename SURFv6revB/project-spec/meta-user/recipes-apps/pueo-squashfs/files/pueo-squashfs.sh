@@ -3,7 +3,9 @@
 # this is an overlay-ed filesystem merge
 PUEOFS="/usr/local/"
 PUEOSQUASHFS="/mnt/pueo.sqfs"
+PYTHONSQUASHFS="/mnt/python.sqfs"
 PUEOTMPSQUASHFS="/tmp/pueo/pueo.sqfs"
+PYTHONTMPSQUASHFS="/tmp/pueo/python.sqfs"
 
 # everything gets stored in /tmp/pueo.
 # if you want to reread the qspifs, delete /tmp/pueo.
@@ -14,6 +16,7 @@ PUEOTMPSQUASHFS="/tmp/pueo/pueo.sqfs"
 # the /tmp/pueo/pueo_sqfs_working directory.
 PUEOTMPDIR="/tmp/pueo"
 PUEOSQFSMNT="/tmp/pueo/pueo_sqfs_mnt"
+PYTHONSQFSMNT="/tmp/pueo/python_sqfs_mnt"
 PUEOUPPERMNT="/tmp/pueo/pueo_sqfs_working"
 PUEOWORKMNT="/tmp/pueo/pueo_sqfs_ovdir"
 
@@ -33,6 +36,7 @@ create_temporary_dirs() {
     if [ ! -e $PUEOTMPDIR ] ; then
        echo "Creating $PUEOTMPDIR and subdirectories."
        mkdir $PUEOTMPDIR
+       mkdir $PYTHONSQFSMNT
        mkdir $PUEOSQFSMNT
        mkdir $PUEOUPPERMNT
        mkdir $PUEOWORKMNT
@@ -92,17 +96,26 @@ mount_pueofs() {
 	# the only thing we check is if the sqfs exists:
 	# if it does, we assume we're restarting, and don't
 	# copy anything. Otherwise we copy everything.
-	if [ ! -f $PUEOTMPSQUASHFS ] ; then
-	    echo "$PUEOTMPSQUASHFS is missing - assuming first time boot"
+	if [ ! -f $PUEOTMPSQUASHFS ] || [ ! -f $PYTHONTMPSQUASHFS ]; then
+	    # remove them both
+	    rm -rf $PUEOTMPSQUASHFS
+	    rm -rf $PYTHONTMPSQUASHFS
+	    echo "One of ${PUEOTMPSQUASHFS}/${PYTHONTMPSQUASHFS} was missing - assuming first time boot"
 	    mount_qspifs
-	    if [ -f $PUEOSQUASHFS ] ; then
-		echo "Found PUEO squashfs, copying to tmp"
-		cp $PUEOSQUASHFS $PUEOTMPSQUASHFS
-	    else
-		echo "No PUEO squashfs found! Aborting!"
+	    if [ ! -f $PUEOSQUASHFS ] ; then
+		echo "No ${PUEOSQUASHFS} found! Aborting!"
 		umount_qspifs
 		exit 1
 	    fi
+	    if [ ! -f $PYTHONSQUASHFS ] ; then
+		echo "No ${PYTHONSQUASHFS} found! Aborting!"
+		umount_qspifs
+		exit 1
+	    fi
+	    echo "Copying PUEO/python squashfs to tmp"
+	    cp $PUEOSQUASHFS $PUEOTMPSQUASHFS
+	    cp $PYTHONSQUASHFS $PYTHONTMPSQUASHFS
+	    echo "Processing bitstream directory"
 	    # this will take some time
 	    if [ -e $PUEOBITDIR ] ; then
 		uncompress_bitstreams ".gz" "gzip -d -k -c "
@@ -111,17 +124,25 @@ mount_pueofs() {
 	    fi
 	    umount_qspifs
 	fi
-	# ok it should exist now
+	# ok they should both exist now
 	mount -t squashfs -o loop --source $PUEOTMPSQUASHFS $PUEOSQFSMNT
 	MOUNTRET=$?
 	if [ $MOUNTRET -eq 0 ] ; then
 	    echo "${PUEOSQFSMNT} mounted OK from ${PUEOTMPSQUASHFS}"
 	else
-	    echo "Sqfs mount failure: ${MOUNTRET}"
+	    echo "PUEO sqfs mount failure: ${MOUNTRET}"
+	    exit 1
+	fi
+	mount -t squashfs -o loop --source $PYTHONTMPSQUASHFS $PYTHONSQFSMNT
+	MOUNTRET=$?
+	if [ $MOUNTRET -eq 0 ] ; then
+	    echo "${PYTHONSQFSMNT} mounted OK from ${PYTHONTMPSQUASHFS}"
+	else
+	    echo "Python sqfs mount failure: ${MOUNTRET}"
 	    exit 1
 	fi
 	# and mount the overlay
-	OVERLAYOPTIONS="lowerdir=${PUEOSQFSMNT},upperdir=${PUEOUPPERMNT},workdir=${PUEOWORKMNT}"
+	OVERLAYOPTIONS="lowerdir=${PYTHONSQFSMNT}:${PUEOSQFSMNT},upperdir=${PUEOUPPERMNT},workdir=${PUEOWORKMNT}"
 	mount -t overlay --options=$OVERLAYOPTIONS overlay $PUEOFS
 	MOUNTRET=$?
 	if [ $MOUNTRET -eq 0 ] ; then
@@ -135,8 +156,12 @@ mount_pueofs() {
 }
 
 umount_pueofs() {
-    umount $PUEOFS
-    umount $PUEOSQFSMNT
+    # lazy unmount, weirdly you get busy stuff or whatever occasionally
+    umount -l $PUEOFS    
+    umount -l $PUEOSQFSMNT
+    umount -l $PYTHONSQFSMNT
+    # give a moment to let things clean up
+    sleep 0.25
 }
 
 cache_eeprom() {
