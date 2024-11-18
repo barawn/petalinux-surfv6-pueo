@@ -1,5 +1,18 @@
 #!/bin/bash
 
+# software override stuff
+SFLD="SFLD"
+SFOV="SFOV"
+KEYFN="/sys/devices/platform/firmware:zynqmp-firmware/pggs0"
+KEY=`cat $KEYFN | sed s/0x//g`
+THE_KEY="DEADBEEF"
+
+EEPROMCMD="dd if=/tmp/pueo/eeprom bs=4 skip=18 count=1"
+OVCMD="dd if=/tmp/pueo/eeprom bs=1 skip=79 count=1"
+S0CMD="dd if=/tmp/pueo/eeprom bs=1 skip=76 count=1"
+S1CMD="dd if=/tmp/pueo/eeprom bs=1 skip=77 count=1"
+S2CMD="dd if=/tmp/pueo/eeprom bs=1 skip=78 count=1"
+
 # this is an overlay-ed filesystem merge
 PUEOFS="/usr/local/"
 PUEOSQUASHFS="/mnt/pueo.sqfs"
@@ -87,13 +100,84 @@ uncompress_bitstreams() {
     done
 }
 
+soft_slotname() {
+    if [ $1 == "0" ] ; then
+	echo "pueo.sqfs"
+    else
+	echo "pueo.sqfs.$1"
+    fi    
+}
+
+soft_check() {
+    if [ ! -f $1 ] ; then
+	echo 1
+    else
+	unsquashfs -s $1 &> /dev/null
+	echo $?
+    fi    
+}
+
+find_soft_loadname() {
+    # if /tmp/pueo/next exists this is not a boot, it's restart
+    if [ -f "/tmp/pueo/next" ] ; then
+	PUEOSQFS=$(readlink "/tmp/pueo/next")
+	if [ $(soft_check $PUEOSQFS) -ne 0 ] ; then
+	    echo "Next software $PUEOSQFS is not valid, falling back"
+	    PUEOSQFS="/tmp/pueo/pueo.sqfs"
+	fi
+    else
+	OVLD=`$EEPROMCMD`
+	if [ $OVLD == $SFOV ] ; then
+	    # first check if we've reset
+	    if [ $KEY == ${THE_KEY} ] ; then
+		BOOTTYPE="reset"
+		PUEOSQFS="/tmp/pueo/pueo.sqfs"
+	    else
+		BOOTTYPE="power-on"
+		PUEOSQFSNM=$(soft_slotname $OVLD)
+		PUEOSQFS="/tmp/pueo/$PUEOSQFSNM"
+		if [ $(soft_check $PUEOSQFS) -ne 0 ] ; then
+		    BOOTTYPE="power-on override failure"
+		    PUEOSQFS="/tmp/pueo/pueo.sqfs"
+		fi
+		echo ${THE_KEY} > $KEYFN
+	    fi
+	    echo "Override $BOOTTYPE : using $PUEOSQFS"
+	elif [ $OVLD == $SFLD ] ; then
+	    S0=`$S0CMD`
+	    S1=`$S1CMD`
+	    S2=`$S2CMD`
+	    echo "Soft load order $S0 $S1 $S2"
+	    PUEOSQFSNM=$(soft_slotname $S0)
+	    PUEOSQFS="/tmp/pueo/$PUEOSQFSNM"
+	    if [ $(soft_check $PUEOSQFS) -ne 0 ] ; then
+		echo "$PUEOSQFS is not valid, trying slot $S1"
+		PUEOSQFSNM=$(soft_slotname $S1)
+		PUEOSQFS="/tmp/pueo/$PUEOSQFSNM"
+		if [ $(soft_check $PUEOSQFS) -ne 0 ] ; then
+		    echo "$PUEOSQFS is not valid, trying slot $S2"
+		    PUEOSQFSNM=$(soft_slotname $S2)
+		    PUEOSQFS="/tmp/pueo/$PUEOSQFSNM"
+		    if [ $(soft_check $PUEOSQFS) -ne 0 ] ; then
+			echo "$PUEOSQFS is not valid, falling back"
+			PUEOSQFS="/tmp/pueo/pueo.sqfs"
+		    fi
+		fi
+	    fi
+	else
+	    PUEOSQFS="/tmp/pueo/pueo.sqfs"
+	    echo "No override or load order: using $PUEOSQFS"
+	fi
+    fi    
+}
+
 # this is really "copy everything out of qspifs"
 mount_pueofs() {
-    # is /usr/local mounted (maybe we're being restarted)
+    # this happens if bmLiveRestart is called
     if mountpoint -q $PUEOFS ; then
 	echo "${PUEOFS} is already mounted, skipping"
     else
-	# the only thing we check is if the sqfs exists:
+	# the only thing we check is if the fallback sqfs exists:
 	# if it does, we assume we're restarting, and don't
 	# copy anything. Otherwise we copy everything.
 	if [ ! -f $PUEOTMPSQUASHFS ] || [ ! -f $PYTHONTMPSQUASHFS ]; then
@@ -112,9 +196,12 @@ mount_pueofs() {
 		umount_qspifs
 		exit 1
 	    fi
-	    echo "Copying PUEO/python squashfs to tmp"
-	    cp $PUEOSQUASHFS $PUEOTMPSQUASHFS
-	    cp $PYTHONSQUASHFS $PYTHONTMPSQUASHFS
+	    echo "Processing squashfses"
+	    for sfs in `ls $SQUASHFSES` ; do
+		destsfs="$PUEOTMPDIR/$sfs"
+		echo "copying $sfs to $destsfs"
+		cp $sfs $destsfs
+	    done
 	    echo "Processing bitstream directory"
 	    # this will take some time
 	    if [ -e $PUEOBITDIR ] ; then
@@ -124,11 +211,14 @@ mount_pueofs() {
 	    fi
 	    umount_qspifs
 	fi
-	# ok they should both exist now
-	mount -t squashfs -o loop --source $PUEOTMPSQUASHFS $PUEOSQFSMNT
+	# figure out which soft to load
+	find_soft_loadname
+	# clear a next pointer if it exists
+	rm -rf "/tmp/pueo/next"
+	mount -t squashfs -o loop --source $PUEOSQFS $PUEOSQFSMNT
 	MOUNTRET=$?
 	if [ $MOUNTRET -eq 0 ] ; then
-	    echo "${PUEOSQFSMNT} mounted OK from ${PUEOTMPSQUASHFS}"
+	    echo "${PUEOSQFSMNT} mounted OK from $PUEOSQFS"
 	else
 	    echo "PUEO sqfs mount failure: ${MOUNTRET}"
 	    exit 1
@@ -152,6 +242,8 @@ mount_pueofs() {
 	    umount $PUEOTMPSQUASHFS
 	    exit 1
 	fi
+	# and create the next pointer
+	ln -s "/tmp/pueo/next" $PUEOSQFS
     fi
 }
 
@@ -183,6 +275,8 @@ trap catch_term SIGTERM
 # check if boot.sh exists in /usr/local
 # If it does, it's the one that spawns 
 # Otherwise we run sleep infinity
+# Sleep infinity will return 0, so we
+# always exit and restart
 if [ -f $PUEOBOOT ] ; then
     $PUEOBOOT &
     waitjob=$!
@@ -192,5 +286,53 @@ else
 fi
 
 wait
-echo "Terminating"
-umount_pueofs
+RETVAL=$?
+# the magic exit code stuff here comes from using
+# sleep infinity: you can zoink sleep infinity
+# to test pueo-squashfs.
+
+# killed with USR1: 138 (10)
+if [ $RETVAL -eq 0 ] || [ $RETVAL -eq 138 ]; then
+    echo "Unmounting, then restarting"
+    umount_pueofs
+    exit 0
+fi
+# killed with USR2: 140
+if [ $RETVAL -eq 1 ] || [ $RETVAL -eq 140 ]; then
+    echo "Restarting without unmounting"
+    exit 0
+fi
+# killed with QUIT: 131
+if [ $RETVAL -eq 2 ] || [ $RETVAL -eq 131 ]; then
+    echo "Terminating without unmounting"
+    exit 1
+fi
+# killed with TERM: 143
+if [ $RETVAL -eq 3 ] || [ $RETVAL -eq 143 ]; then
+    echo "Unmounting, then terminating"
+    umount_pueofs
+    exit 1
+fi
+# killed with INT: 130
+if [$RETVAL -eq 4 ] || [ $RETVAL -eq 130 ]; then
+    echo "Unmounting, cleaning up, then restarting"
+    umount_pueofs
+    sleep 1
+    rm -rf ${PUEOTMPDIR}
+    exit 0    
+fi
+# killed with ABRT: 136
+if [$RETVAL -eq 5 ] || [ $RETVAL -eq 136 ]; then
+    echo "Unmounting, cleaning up, then terminating"
+    umount_pueofs
+    sleep 1
+    rm -rf ${PUEOTMPDIR}
+    exit 1
+fi
+# killed with KILL: 137
+if [ $RETVAL -eq 127 ] || [ $RETVAL -eq 137 ]; then
+    echo "Terminating and rebooting!!"
+    umount_pueofs
+    sleep 1
+    reboot
+fi
