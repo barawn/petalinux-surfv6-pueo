@@ -7,11 +7,13 @@ KEYFN="/sys/devices/platform/firmware:zynqmp-firmware/pggs0"
 KEY=`cat $KEYFN | sed s/0x//g`
 THE_KEY="deadbeef"
 
-EEPROMCMD="dd if=/tmp/pueo/eeprom bs=4 skip=18 count=1 2>/dev/null"
-OVCMD="dd if=/tmp/pueo/eeprom bs=1 skip=79 count=1 2>/dev/null"
-S0CMD="dd if=/tmp/pueo/eeprom bs=1 skip=76 count=1 2>/dev/null"
-S1CMD="dd if=/tmp/pueo/eeprom bs=1 skip=77 count=1 2>/dev/null"
-S2CMD="dd if=/tmp/pueo/eeprom bs=1 skip=78 count=1 2>/dev/null"
+EEPROMCMD="dd if=/tmp/pueo/eeprom bs=4 skip=18 count=1"
+OVCMD="dd if=/tmp/pueo/eeprom bs=1 skip=79 count=1"
+S0CMD="dd if=/tmp/pueo/eeprom bs=1 skip=76 count=1"
+S1CMD="dd if=/tmp/pueo/eeprom bs=1 skip=77 count=1"
+S2CMD="dd if=/tmp/pueo/eeprom bs=1 skip=78 count=1"
+
+SQUASHFSES="/mnt/*.sqfs"
 
 # this is an overlay-ed filesystem merge
 PUEOFS="/usr/local/"
@@ -80,26 +82,48 @@ umount_qspifs() {
     ubidetach -d 0 /dev/ubi_ctrl
 }    
 
-uncompress_bitstreams() {
-    SFX=$1
-    PROG=$2
-    # search slots and main dir (for... whatever reason)
-    for i in `ls ${PUEOBITDIR}/*${SFX} ${PUEOBITDIR}/[012]/*${SFX}`
-    do
-	NEWNAME="$(basename $i $SFX)"
-	SLOTDIR="$(dirname $i)"
-	SLOTNUM="$(basename $SLOTDIR)"
-	DEST=${PUEOLIBBITDIR}/${NEWNAME}
-	echo "Uncompressing $i to ${DEST}"
-	# prog needs to decompress to stdout and keep original
-	${PROG} $i > ${DEST}
-	# check if it was in a slotdir
-	if [ $SLOTDIR != $SLOTNUM ] ; then
-	    LINKPATH=${PUEOLIBBITDIR}/${SLOTNUM}
-	    echo "Linking ${LINKPATH} to ${DEST}"
-	    ln -s ${DEST} ${LINKPATH}
+uncompress_and_copy_to_libfirmware() {
+    BASEPATH=$1
+    FN=$2
+    BASE=$(basename $FN)
+    GZBASE=$(basename $FN .gz)
+    BZ2BASE=$(basename $FN .bz2)
+    ZSTBASE=$(basename $FN .zst)
+    XZBASE=$(basename $FN .xz)
+    ZBASE=$(basename $FN .Z)
+
+    SLOTDIR=$(dirname $FN)
+    SLOTNUM=$(basename $SLOTDIR)    
+    if [ $BASE != $GZBASE ] ; then
+	PROG="gzip -d -k -c "
+	DEST=${PUEOLIBBITDIR}/$GZBASE
+    elif [ $BASE != $BZ2BASE ] ; then
+	PROG="bzip2 -d -k -c "
+	DEST=${PUEOLIBBITDIR}/$BZ2BASE
+    elif [ $BASE != $ZSTBASE ] ; then
+	PROG="zstd -d --stdout "
+	DEST=${PUEOLIBBITDIR}/$ZSTBASE
+    elif [ $BASE != $XZBASE ] ; then
+	PROG="xzcat "
+	DEST=${PUEOLIBBITDIR}/$XZBASE
+    elif [ $BASE != $ZBASE ] ; then
+	PROG="zcat "
+	DEST=${PUEOLIBBITDIR}/$ZBASE
+    else
+	PROG="cat "
+	DEST=${PUEOLIBBITDIR}/$BASE
+    fi
+
+    echo "Loading $FN to ${DEST}"
+    ${PROG} $FN > ${DEST}
+    if [ $SLOTDIR != $BASEPATH ] ; then
+	LINKPATH=${PUEOLIBBITDIR}/${SLOTNUM}
+	echo "Linking ${LINKPATH} to ${DEST}"
+	if [ -f ${LINKPATH} ] ; then
+	    rm ${LINKPATH}
 	fi
-    done
+	ln -s ${DEST} ${LINKPATH}
+    fi
 }
 
 soft_slotname() {
@@ -128,15 +152,15 @@ find_soft_loadname() {
 	    PUEOSQFS="/tmp/pueo/pueo.sqfs"
 	fi
     else
-	OVLD=`$EEPROMCMD`
+	OVLD=`$EEPROMCMD 2>/dev/null`
 	if [ $OVLD == $SFOV ] ; then
 	    # first check if we've reset
 	    if [ $KEY == ${THE_KEY} ] ; then
 		BOOTTYPE="reset"
 		PUEOSQFS="/tmp/pueo/pueo.sqfs"
-	    else		
+	    else
 		BOOTTYPE="power-on"
-		OVSLT=`$OVCMD`
+		OVSLT=`$OVCMD 2>/dev/null`
 		PUEOSQFSNM=$(soft_slotname $OVSLT)
 		PUEOSQFS="/tmp/pueo/$PUEOSQFSNM"
 		if [ $(soft_check $PUEOSQFS) -ne 0 ] ; then
@@ -148,9 +172,9 @@ find_soft_loadname() {
 	    fi
 	    echo "Override $BOOTTYPE : using $PUEOSQFS"
 	elif [ $OVLD == $SFLD ] ; then
-	    S0=`$S0CMD`
-	    S1=`$S1CMD`
-	    S2=`$S2CMD`
+	    S0=`$S0CMD 2>/dev/null`
+	    S1=`$S1CMD 2>/dev/null`
+	    S2=`$S2CMD 2>/dev/null`
 	    echo "Soft load order $S0 $S1 $S2"
 	    PUEOSQFSNM=$(soft_slotname $S0)
 	    PUEOSQFS="/tmp/pueo/$PUEOSQFSNM"
@@ -188,7 +212,7 @@ mount_pueofs() {
 	    # remove them both
 	    rm -rf $PUEOTMPSQUASHFS
 	    rm -rf $PYTHONTMPSQUASHFS
-	    echo "One of ${PUEOTMPSQUASHFS}/${PYTHONTMPSQUASHFS} was missing - assuming first time boot"
+	    echo "One of ${PUEOTMPSQUASHFS} or ${PYTHONTMPSQUASHFS} was missing - assuming first time boot"
 	    mount_qspifs
 	    if [ ! -f $PUEOSQUASHFS ] ; then
 		echo "No ${PUEOSQUASHFS} found! Aborting!"
@@ -202,16 +226,17 @@ mount_pueofs() {
 	    fi
 	    echo "Processing squashfses"
 	    for sfs in `ls $SQUASHFSES` ; do
-		destsfs="$PUEOTMPDIR/$sfs"
+		fn=$(basename $sfs)
+		destsfs="$PUEOTMPDIR/$fn"
 		echo "copying $sfs to $destsfs"
 		cp $sfs $destsfs
 	    done
 	    echo "Processing bitstream directory"
 	    # this will take some time
 	    if [ -e $PUEOBITDIR ] ; then
-		uncompress_bitstreams ".gz" "gzip -d -k -c "
-		uncompress_bitstreams ".bz2" "bzip2 -d -k -c "
-		uncompress_bitstreams ".zst" "zstd -d --stdout "
+		for f in `find $PUEOBITDIR -type f` ; do
+		    uncompress_and_copy_to_libfirmware $PUEOBITDIR $f
+		done
 	    fi
 	    umount_qspifs
 	fi
