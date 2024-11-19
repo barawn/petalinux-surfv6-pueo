@@ -4,6 +4,8 @@ Description=pueo-squashfs
 [Service]
 ExecStart=/usr/bin/pueo-squashfs.sh
 StandardOutput=journal
+SuccessExitStatus=1
+RestartForceExitStatus=0
 
 [Install]
 WantedBy=multi-user.target

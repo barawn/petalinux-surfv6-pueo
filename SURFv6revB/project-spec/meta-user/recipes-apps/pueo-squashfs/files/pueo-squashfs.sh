@@ -5,13 +5,13 @@ SFLD="SFLD"
 SFOV="SFOV"
 KEYFN="/sys/devices/platform/firmware:zynqmp-firmware/pggs0"
 KEY=`cat $KEYFN | sed s/0x//g`
-THE_KEY="DEADBEEF"
+THE_KEY="deadbeef"
 
-EEPROMCMD="dd if=/tmp/pueo/eeprom bs=4 skip=18 count=1"
-OVCMD="dd if=/tmp/pueo/eeprom bs=1 skip=79 count=1"
-S0CMD="dd if=/tmp/pueo/eeprom bs=1 skip=76 count=1"
-S1CMD="dd if=/tmp/pueo/eeprom bs=1 skip=77 count=1"
-S2CMD="dd if=/tmp/pueo/eeprom bs=1 skip=78 count=1"
+EEPROMCMD="dd if=/tmp/pueo/eeprom bs=4 skip=18 count=1 2>/dev/null"
+OVCMD="dd if=/tmp/pueo/eeprom bs=1 skip=79 count=1 2>/dev/null"
+S0CMD="dd if=/tmp/pueo/eeprom bs=1 skip=76 count=1 2>/dev/null"
+S1CMD="dd if=/tmp/pueo/eeprom bs=1 skip=77 count=1 2>/dev/null"
+S2CMD="dd if=/tmp/pueo/eeprom bs=1 skip=78 count=1 2>/dev/null"
 
 # this is an overlay-ed filesystem merge
 PUEOFS="/usr/local/"
@@ -32,6 +32,8 @@ PUEOSQFSMNT="/tmp/pueo/pueo_sqfs_mnt"
 PYTHONSQFSMNT="/tmp/pueo/python_sqfs_mnt"
 PUEOUPPERMNT="/tmp/pueo/pueo_sqfs_working"
 PUEOWORKMNT="/tmp/pueo/pueo_sqfs_ovdir"
+
+PUEOSQFSNEXT="/tmp/pueo/next"
 
 # bitstreams. these are stored compressed and uncompressed to /lib/firmware
 # you can always try temporary bitstreams by just adding more to /lib/firmware
@@ -120,7 +122,7 @@ soft_check() {
 find_soft_loadname() {
     # if /tmp/pueo/next exists this is not a boot, it's restart
     if [ -f "/tmp/pueo/next" ] ; then
-	PUEOSQFS=$(readlink "/tmp/pueo/next")
+	PUEOSQFS=$(readlink ${PUEOSQFSNEXT})
 	if [ $(soft_check $PUEOSQFS) -ne 0 ] ; then
 	    echo "Next software $PUEOSQFS is not valid, falling back"
 	    PUEOSQFS="/tmp/pueo/pueo.sqfs"
@@ -132,11 +134,13 @@ find_soft_loadname() {
 	    if [ $KEY == ${THE_KEY} ] ; then
 		BOOTTYPE="reset"
 		PUEOSQFS="/tmp/pueo/pueo.sqfs"
-	    else
+	    else		
 		BOOTTYPE="power-on"
-		PUEOSQFSNM=$(soft_slotname $OVLD)
+		OVSLT=`$OVCMD`
+		PUEOSQFSNM=$(soft_slotname $OVSLT)
 		PUEOSQFS="/tmp/pueo/$PUEOSQFSNM"
 		if [ $(soft_check $PUEOSQFS) -ne 0 ] ; then
+		    echo "$PUEOSQFS is not valid"
 		    BOOTTYPE="power-on override failure"
 		    PUEOSQFS="/tmp/pueo/pueo.sqfs"
 		fi
@@ -243,7 +247,7 @@ mount_pueofs() {
 	    exit 1
 	fi
 	# and create the next pointer
-	ln -s "/tmp/pueo/next" $PUEOSQFS
+	ln -s $PUEOSQFS $PUEOSQFSNEXT
     fi
 }
 
@@ -285,7 +289,7 @@ else
     waitjob=$!
 fi
 
-wait
+wait $waitjob
 RETVAL=$?
 # the magic exit code stuff here comes from using
 # sleep infinity: you can zoink sleep infinity
