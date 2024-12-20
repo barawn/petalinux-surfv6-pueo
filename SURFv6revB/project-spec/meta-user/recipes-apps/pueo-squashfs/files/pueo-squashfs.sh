@@ -35,6 +35,12 @@ PYTHONSQFSMNT="/tmp/pueo/python_sqfs_mnt"
 PUEOUPPERMNT="/tmp/pueo/pueo_sqfs_working"
 PUEOWORKMNT="/tmp/pueo/pueo_sqfs_ovdir"
 
+# these are conveniently always the same
+OVERLAYOPTIONS="lowerdir=${PYTHONSQFSMNT}:${PUEOSQFSMNT},upperdir=${PUEOUPPERMNT},workdir=${PUEOWORKMNT}"
+
+
+# we only need a next pointer:
+# we can find the currently loaded soft via losetup /dev/loop0
 PUEOSQFSNEXT="/tmp/pueo/next"
 
 # bitstreams. these are stored compressed and uncompressed to /lib/firmware
@@ -261,11 +267,10 @@ mount_pueofs() {
 	    exit 1
 	fi
 	# and mount the overlay
-	OVERLAYOPTIONS="lowerdir=${PYTHONSQFSMNT}:${PUEOSQFSMNT},upperdir=${PUEOUPPERMNT},workdir=${PUEOWORKMNT}"
 	mount -t overlay --options=$OVERLAYOPTIONS overlay $PUEOFS
 	MOUNTRET=$?
 	if [ $MOUNTRET -eq 0 ] ; then
-	    echo "${PUEOFS} mounted R/W as overlay FS."
+	    echo "${PUEOFS} mounted R/W as overlay FS."	    
 	else
 	    echo "Overlay mount failure: ${MOUNTRET}"
 	    umount $PUEOTMPSQUASHFS
@@ -320,45 +325,69 @@ RETVAL=$?
 # sleep infinity: you can zoink sleep infinity
 # to test pueo-squashfs.
 
-# killed with USR1: 138 (10)
+# CHANGED IN 0.3.0:
+# We now ONLY support terminating without unmounting,
+# the friggin' user can handle cleanup and stuff
+# themselves. We also clean up the exit codes to map
+# better.
+
+
+# NOTE NOTE NOTE: if you mess around with crap in
+# /usr/local, know what you're doing.
+# Without a revert restart, anything you've changed
+# in /usr/local will persist.
+
+# NORMAL RESTART (0): killed with USR1: 138 (10)
 if [ $RETVAL -eq 0 ] || [ $RETVAL -eq 138 ]; then
     echo "Unmounting, then restarting"
     umount_pueofs
     exit 0
 fi
-# killed with USR2: 140
+
+# HOT RESTART (1): killed with USR2: 140
 if [ $RETVAL -eq 1 ] || [ $RETVAL -eq 140 ]; then
     echo "Restarting without unmounting"
     exit 0
 fi
-# killed with QUIT: 131
-if [ $RETVAL -eq 2 ] || [ $RETVAL -eq 131 ]; then
-    echo "Terminating without unmounting"
-    exit 1
-fi
-# killed with TERM: 143
-if [ $RETVAL -eq 3 ] || [ $RETVAL -eq 143 ]; then
-    echo "Unmounting, then terminating"
+
+# NORMAL REVERT RESTART (2): killed with INT: 130
+if [$RETVAL -eq 2 ] || [ $RETVAL -eq 130 ]; then
+    echo "Unmounting, reverting, then restarting"
     umount_pueofs
-    exit 1
+    rm -rf ${PUEOUPPERMNT}
+    mkdir ${PUEOUPPERMNT}
+    exit 0
 fi
-# killed with INT: 130
-if [$RETVAL -eq 4 ] || [ $RETVAL -eq 130 ]; then
+
+# HOT REVERT RESTART (3): killed with ABRT: 136
+if [$RETVAL -eq 3 ] || [ $RETVAL -eq 136 ]; then
+    echo "Reverting, then restarting without unmounting"
+    # we only need to unmount the overlay, delete the upper mount,
+    # and remount it.
+    umount -l $PUEOFS
+    sleep 0.25
+    rm -rf ${PUEOUPPERMNT}
+    mkdir ${PUEOUPPERMNT}
+    mount -t overlay --options=$OVERLAYOPTIONS overlay $PUEOFS
+    exit 0
+fi
+
+# CLEANUP RESTART (4): killed with ALRM: 142
+if [$RETVAL -eq 4 ] || [ $RETVAL -eq 142 ]; then
     echo "Unmounting, cleaning up, then restarting"
     umount_pueofs
     sleep 1
     rm -rf ${PUEOTMPDIR}
     exit 0    
 fi
-# killed with ABRT: 136
-if [$RETVAL -eq 5 ] || [ $RETVAL -eq 136 ]; then
-    echo "Unmounting, cleaning up, then terminating"
-    umount_pueofs
-    sleep 1
-    rm -rf ${PUEOTMPDIR}
+
+# TERMINATE INSTEAD (126): killed with QUIT: 131
+if [ $RETVAL -eq 126 ] || [ $RETVAL -eq 131 ]; then
+    echo "Terminating without unmounting"
     exit 1
 fi
-# killed with KILL: 137
+
+# REBOOT (127): killed with KILL: 137
 if [ $RETVAL -eq 127 ] || [ $RETVAL -eq 137 ]; then
     echo "Terminating and rebooting!!"
     umount_pueofs
