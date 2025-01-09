@@ -351,7 +351,7 @@ if [ $RETVAL -eq 1 ] || [ $RETVAL -eq 140 ]; then
 fi
 
 # NORMAL REVERT RESTART (2): killed with INT: 130
-if [$RETVAL -eq 2 ] || [ $RETVAL -eq 130 ]; then
+if [ $RETVAL -eq 2 ] || [ $RETVAL -eq 130 ]; then
     echo "Unmounting, reverting, then restarting"
     umount_pueofs
     rm -rf ${PUEOUPPERMNT}
@@ -360,7 +360,7 @@ if [$RETVAL -eq 2 ] || [ $RETVAL -eq 130 ]; then
 fi
 
 # HOT REVERT RESTART (3): killed with ABRT: 136
-if [$RETVAL -eq 3 ] || [ $RETVAL -eq 136 ]; then
+if [ $RETVAL -eq 3 ] || [ $RETVAL -eq 136 ]; then
     echo "Reverting, then restarting without unmounting"
     # we only need to unmount the overlay, delete the upper mount,
     # and remount it.
@@ -373,7 +373,7 @@ if [$RETVAL -eq 3 ] || [ $RETVAL -eq 136 ]; then
 fi
 
 # CLEANUP RESTART (4): killed with ALRM: 142
-if [$RETVAL -eq 4 ] || [ $RETVAL -eq 142 ]; then
+if [ $RETVAL -eq 4 ] || [ $RETVAL -eq 142 ]; then
     echo "Unmounting, cleaning up, then restarting"
     umount_pueofs
     sleep 1
