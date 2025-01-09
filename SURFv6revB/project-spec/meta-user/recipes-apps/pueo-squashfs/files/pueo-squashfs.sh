@@ -337,8 +337,9 @@ RETVAL=$?
 # Without a revert restart, anything you've changed
 # in /usr/local will persist.
 
-# NORMAL RESTART (0): killed with USR1: 138 (10)
-if [ $RETVAL -eq 0 ] || [ $RETVAL -eq 138 ]; then
+# NORMAL RESTART (0): killed with TERM: 143 (10)
+# This is what we do on a normal systemctl stop or restart.
+if [ $RETVAL -eq 0 ] || [ $RETVAL -eq 143 ]; then
     echo "Unmounting, then restarting"
     umount_pueofs
     exit 0
@@ -394,3 +395,5 @@ if [ $RETVAL -eq 127 ] || [ $RETVAL -eq 137 ]; then
     sleep 1
     reboot
 fi
+
+echo "Unknown exit code $RETVAL received!"
