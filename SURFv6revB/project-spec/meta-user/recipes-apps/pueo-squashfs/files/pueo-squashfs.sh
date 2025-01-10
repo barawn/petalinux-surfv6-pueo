@@ -291,12 +291,11 @@ mount_pueofs() {
 }
 
 umount_pueofs() {
-    # lazy unmount, weirdly you get busy stuff or whatever occasionally
-    umount -l $PUEOFS    
-    umount -l $PUEOSQFSMNT
-    umount -l $PYTHONSQFSMNT
-    # give a moment to let things clean up
-    sleep 0.25
+    # we don't need lazy umounts anymore,
+    # we actively wait for things to close.
+    umount $PUEOFS    
+    umount $PUEOSQFSMNT
+    umount $PYTHONSQFSMNT
 }
 
 cache_eeprom() {
@@ -331,6 +330,23 @@ fi
 
 wait $waitjob
 RETVAL=$?
+
+# wait up to a second for files to close
+BUSY=yes
+for i in `seq 1 100`; do
+    NFLS=`lsof | grep $PUEOFS | wc -l`
+    if [ $NFLS -eq 0 ] ; then
+	echo "$PUEOFS became free after $i loops"
+	BUSY=no
+	break
+    fi
+    if [ $i -eq 100 ] ; then
+	echo "Waited 100 loops: $PUEOFS still busy??"
+	break
+    fi
+    sleep 0.01
+done
+
 # the magic exit code stuff here comes from using
 # sleep infinity: you can zoink sleep infinity
 # to test pueo-squashfs.
@@ -356,11 +372,15 @@ fi
 # Without a revert restart, anything you've changed
 # in /usr/local will persist.
 
-# NORMAL RESTART (0): killed with TERM: 143 (10)
+# NORMAL RESTART (0): killed with TERM: 143
 # This is what we do on a normal systemctl stop or restart.
 if [ $RETVAL -eq 0 ] || [ $RETVAL -eq 143 ]; then
-    echo "Unmounting, then restarting"
-    umount_pueofs
+    if [ $BUSY = no ] ; then
+	echo "Unmounting, then restarting"
+	umount_pueofs
+    else
+	echo "Unmount requested, but $PUEOFS is busy!"
+    fi    
     exit 0
 fi
 
@@ -372,32 +392,43 @@ fi
 
 # NORMAL REVERT RESTART (2): killed with INT: 130
 if [ $RETVAL -eq 2 ] || [ $RETVAL -eq 130 ]; then
-    echo "Unmounting, reverting, then restarting"
-    umount_pueofs
-    rm -rf ${PUEOUPPERMNT}
-    mkdir ${PUEOUPPERMNT}
+    if [ $BUSY = "no" ] ; then
+	echo "Unmounting, reverting, then restarting"
+	umount_pueofs
+	rm -rf ${PUEOUPPERMNT}
+	mkdir ${PUEOUPPERMNT}
+    else
+	echo "Revert requested, but $PUEOFS is busy!"
+    fi    
     exit 0
 fi
 
 # HOT REVERT RESTART (3): killed with ABRT: 136
 if [ $RETVAL -eq 3 ] || [ $RETVAL -eq 136 ]; then
-    echo "Reverting, then restarting without unmounting"
-    # we only need to unmount the overlay, delete the upper mount,
-    # and remount it.
-    umount -l $PUEOFS
-    sleep 0.25
-    rm -rf ${PUEOUPPERMNT}
-    mkdir ${PUEOUPPERMNT}
-    mount -t overlay --options=$OVERLAYOPTIONS overlay $PUEOFS
+    if [ $BUSY = "no" ] ; then
+	echo "Reverting, then restarting without unmounting"
+	# we only need to unmount the overlay, delete the upper mount,
+	# and remount it.
+	umount $PUEOFS
+	rm -rf ${PUEOUPPERMNT}
+	mkdir ${PUEOUPPERMNT}
+	mount -t overlay --options=$OVERLAYOPTIONS overlay $PUEOFS
+    else
+	echo "Hot revert requested, but $PUEOFS is busy!"
+    fi    
     exit 0
 fi
 
 # CLEANUP RESTART (4): killed with ALRM: 142
 if [ $RETVAL -eq 4 ] || [ $RETVAL -eq 142 ]; then
-    echo "Unmounting, cleaning up, then restarting"
-    umount_pueofs
-    sleep 1
-    rm -rf ${PUEOTMPDIR}
+    if [ $BUSY = "no" ] ; then
+	echo "Unmounting, cleaning up, then restarting"
+	umount_pueofs
+	sleep 1
+	rm -rf ${PUEOTMPDIR}
+    else
+	echo "Clean restart requested, but $PUEOFS is busy!"
+    fi
     exit 0    
 fi
 
@@ -410,9 +441,12 @@ fi
 # REBOOT (127): killed with KILL: 137
 if [ $RETVAL -eq 127 ] || [ $RETVAL -eq 137 ]; then
     echo "Terminating and rebooting!!"
-    umount_pueofs
-    sleep 1
+    if [ $BUSY = "no" ] ; then
+	umount_pueofs
+	sleep 1
+    fi   
     reboot
+    exit 1
 fi
 
 echo "Unknown exit code $RETVAL received!"
