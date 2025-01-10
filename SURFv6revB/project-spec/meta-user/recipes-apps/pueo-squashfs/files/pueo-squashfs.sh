@@ -49,8 +49,17 @@ PUEOBITDIR="/mnt/bitstreams"
 PUEOLIBBITDIR="/lib/firmware"
 PUEOBOOT="/usr/local/boot.sh"
 
+SIGCODE=0
+
 catch_term() {
     echo "termination signal caught"
+    SIGCODE=143
+    kill -TERM "$waitjob" 2>/dev/null
+}
+
+catch_usr1() {
+    echo "user1 termination caught"
+    SIGCODE=138
     kill -TERM "$waitjob" 2>/dev/null
 }
 
@@ -305,6 +314,7 @@ mount_pueofs
 
 # catch termination
 trap catch_term SIGTERM
+trap catch_usr1 SIGUSR1
 
 # check if boot.sh exists in /usr/local
 # If it does, it's the one that spawns 
@@ -331,6 +341,15 @@ RETVAL=$?
 # themselves. We also clean up the exit codes to map
 # better.
 
+# Handle if WE were terminated.
+if [ $SIGCODE -eq 143 ]; then
+    echo "SIGTERM received: doing unmount and restart"
+    RETVAL=143
+fi
+if [ $SIGCODE -eq 138 ]; then
+    echo "SIGUSR1 received: terminating without unmount"
+    RETVAL=131
+fi
 
 # NOTE NOTE NOTE: if you mess around with crap in
 # /usr/local, know what you're doing.
